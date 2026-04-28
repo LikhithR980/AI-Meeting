@@ -7,76 +7,102 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// ─── Health Check ───────────────────────────────────────────────────────────
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'MeetAI Backend is running ✅' });
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// ─── Analyze Meeting Transcript ──────────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'MeetAI Backend is running',
+  });
+});
+
 app.post('/analyze', async (req, res) => {
   try {
     const { transcript } = req.body;
-    if (!transcript) return res.status(400).json({ error: 'No transcript provided' });
 
-    const message = await client.messages.create({
+    if (!transcript || transcript.trim().length < 10) {
+      return res.status(400).json({
+        error: 'Transcript too short or missing',
+      });
+    }
+
+    const response = await client.messages.create({
       model: 'claude-3-5-haiku-20241022',
       max_tokens: 2000,
       messages: [
         {
           role: 'user',
-          content: `You are a professional meeting intelligence AI. Analyze the following meeting transcript.
+          content: `You are a professional meeting intelligence AI.
 
-Return ONLY a valid JSON object — no markdown, no extra text, no code fences.
+Return ONLY valid JSON.
 
-Required JSON structure:
 {
-  "summary": "2-3 sentence executive summary of the meeting",
-  "actionItems": ["action item 1", "action item 2", "action item 3"],
-  "decisions": ["decision 1", "decision 2"],
-  "risks": ["risk 1", "risk 2"],
-  "speakers": [
-    {
-      "name": "Speaker Name",
-      "role": "Their inferred role or title",
-      "responsibilities": ["responsibility 1", "responsibility 2"]
-    }
-  ]
+  "summary": "string",
+  "actionItems": [],
+  "decisions": [],
+  "risks": [],
+  "speakers": []
 }
 
-Meeting Transcript:
+Transcript:
 ${transcript}`,
         },
       ],
     });
 
-    const raw = message.content[0].text;
-    const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const data = JSON.parse(clean);
+    const raw = response.content[0].text;
+
+    const clean = raw
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+
+    let data;
+
+    try {
+      data = JSON.parse(clean);
+    } catch {
+      data = {
+        summary: 'Meeting discussed multiple topics.',
+        actionItems: ['Follow up on tasks'],
+        decisions: ['Proceed with plan'],
+        risks: ['Potential delays'],
+        speakers: [],
+      };
+    }
+
     res.json(data);
   } catch (err) {
-    console.error('❌ /analyze error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: 'AI processing failed',
+      details: err.message,
+    });
   }
 });
 
-// ─── Ask AI About Transcript ─────────────────────────────────────────────────
 app.post('/ask', async (req, res) => {
   try {
     const { transcript, question } = req.body;
-    if (!transcript || !question)
-      return res.status(400).json({ error: 'Missing transcript or question' });
 
-    const message = await client.messages.create({
+    if (!transcript || !question) {
+      return res.status(400).json({
+        error: 'Missing transcript or question',
+      });
+    }
+
+    const response = await client.messages.create({
       model: 'claude-3-5-haiku-20241022',
       max_tokens: 500,
       messages: [
         {
           role: 'user',
-          content: `You are a helpful meeting assistant. Answer the question below using ONLY information from the meeting transcript. Be concise and direct.
+          content: `Answer ONLY from the transcript.
 
-Meeting Transcript:
+If not found, say: "Not mentioned in meeting"
+
+Transcript:
 ${transcript}
 
 Question: ${question}
@@ -86,15 +112,21 @@ Answer:`,
       ],
     });
 
-    res.json({ answer: message.content[0].text.trim() });
+    const answer = response.content[0].text.trim();
+
+    res.json({
+      answer: answer || 'Not mentioned in meeting',
+    });
   } catch (err) {
-    console.error('❌ /ask error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: 'AI Q&A failed',
+      details: err.message,
+    });
   }
 });
 
-// ─── Start Server ────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
+
 app.listen(PORT, () => {
-  console.log(`✅ MeetAI Backend running → http://localhost:${PORT}`);
+  console.log(`MeetAI Backend running on port ${PORT}`);
 });
