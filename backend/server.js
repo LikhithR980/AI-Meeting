@@ -59,19 +59,21 @@ ${transcript}`,
       .replace(/```/g, '')
       .trim();
 
-    let data;
+   let data;
 
-    try {
-      data = JSON.parse(clean);
-    } catch {
-      data = {
-        summary: 'Meeting discussed multiple topics.',
-        actionItems: ['Follow up on tasks'],
-        decisions: ['Proceed with plan'],
-        risks: ['Potential delays'],
-        speakers: [],
-      };
-    }
+try {
+  data = JSON.parse(clean);
+} catch (e) {
+  console.log("RAW AI RESPONSE:", raw);
+
+  data = {
+    summary: raw.slice(0, 200),
+    actionItems: [],
+    decisions: [],
+    risks: [],
+    speakers: [],
+  };
+}
 
     res.json(data);
   } catch (err) {
