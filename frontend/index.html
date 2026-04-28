@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeetAI — Smart Meeting Intelligence</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #080812;
+      color: #e2e8f0;
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Gradient Text ── */
+    .grad { background: linear-gradient(135deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+    /* ── Cards ── */
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 14px;
+      backdrop-filter: blur(12px);
+    }
+    .card-hover { transition: transform .2s, border-color .2s, box-shadow .2s; cursor: pointer; }
+    .card-hover:hover { transform: translateY(-3px); border-color: rgba(129,140,248,.5); box-shadow: 0 8px 32px rgba(129,140,248,.15); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 20px; border-radius: 9px; font-weight: 600; font-size: 14px;
+      border: none; cursor: pointer; transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .btn-primary { background: linear-gradient(135deg,#818cf8,#c084fc); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: .9; }
+    .btn-danger  { background: #ef4444; color: #fff; }
+    .btn-danger:hover:not(:disabled)  { background: #dc2626; }
+    .btn-ghost   { background: rgba(255,255,255,.06); color: #94a3b8; border: 1px solid rgba(255,255,255,.1); }
+    .btn-ghost:hover:not(:disabled)   { background: rgba(255,255,255,.1); color: #e2e8f0; }
+
+    /* ── Inputs ── */
+    .inp {
+      width: 100%; padding: 10px 14px;
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 9px; color: #e2e8f0;
+      font-size: 14px; font-family: inherit;
+      outline: none; transition: border-color .2s;
+    }
+    .inp:focus  { border-color: #818cf8; }
+    .inp::placeholder { color: #475569; }
+
+    /* ── Transcript box ── */
+    .transcript-box {
+      height: 260px; overflow-y: auto;
+      background: rgba(0,0,0,.35);
+      border-radius: 10px; padding: 14px 16px;
+      font-family: 'Fira Code', 'Courier New', monospace;
+      font-size: 13.5px; line-height: 1.75;
+      white-space: pre-wrap; word-break: break-word;
+    }
+
+    /* ── Animations ── */
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+    .pulse  { animation: pulse 1.4s ease-in-out infinite; }
+    .fadein { animation: fadeIn .35s ease forwards; }
+
+    /* ── Recording indicator ── */
+    .rec-dot { width:9px; height:9px; border-radius:50%; background:#ef4444; animation: pulse 1s ease-in-out infinite; display:inline-block; }
+
+    /* ── Tags ── */
+    .tag { display:inline-flex; align-items:center; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:700; letter-spacing:.5px; }
+
+    /* ── Tabs ── */
+    .tab { padding:5px 12px; border-radius:7px; font-size:12.5px; font-weight:600; border:none; cursor:pointer; transition:all .15s; }
+    .tab-active { background:rgba(129,140,248,.25); color:#818cf8; border:1px solid rgba(129,140,248,.4); }
+    .tab-inactive { background:rgba(255,255,255,.04); color:#64748b; border:1px solid transparent; }
+    .tab-inactive:hover { background:rgba(255,255,255,.08); color:#94a3b8; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:rgba(129,140,248,.3); border-radius:4px; }
+
+    /* ── Chat bubbles ── */
+    .bubble-user { background:rgba(129,140,248,.18); border-radius:10px 10px 3px 10px; }
+    .bubble-ai   { background:rgba(255,255,255,.06); border-radius:10px 10px 10px 3px; }
+
+    /* ── Speaker card colors ── */
+    .sp-a { --sc:#818cf8; }
+    .sp-b { --sc:#c084fc; }
+    .sp-c { --sc:#fb923c; }
+    .sp-d { --sc:#4ade80; }
+    .sp-e { --sc:#f472b6; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ════════════════════════════════════════════════════════════════════
+//  ⚙️  CONFIG  —  Update BACKEND_URL after deploying to Render
+// ════════════════════════════════════════════════════════════════════
+const BACKEND_URL = 'http://localhost:3001';
+
+// ════════════════════════════════════════════════════════════════════
+//  DEMO DATA
+// ════════════════════════════════════════════════════════════════════
+const DEMO_TRANSCRIPT = `Rahul: Good morning everyone. Let's kick off our sprint planning for the product launch.
+Ananya: I've reviewed the backlog. We have 3 critical features remaining before we can ship.
+Manager: Our deadline is this Friday. What's the current status on the payment gateway integration?
+Rahul: Payment gateway is about 70% done. I need 2 more days to finish the edge cases and testing.
+Ananya: I'll handle backend deployment today and set up the CI/CD pipeline on AWS.
+Manager: We need to seriously consider scaling risks. Our current server configuration can't handle more than 5000 concurrent users.
+Rahul: I'll prepare a performance testing plan and run load tests using k6 tomorrow morning.
+Ananya: I'll also set up monitoring and alerting dashboards in Grafana by end of day.
+Manager: Good. Budget approval for the extra server capacity is confirmed. Launch date is locked in for Friday at 9 AM.
+Rahul: One question — who is handling customer support tickets after launch?
+Manager: Let's hire two support agents by Thursday. Ananya, can you write the API documentation?
+Ananya: Yes, I'll document all REST endpoints for the support team by Thursday noon.
+Rahul: I'll also coordinate the marketing campaign and schedule social media posts for launch day.
+Manager: Great. We also need a rollback plan just in case something goes wrong post-launch.
+Ananya: I'll prepare rollback scripts and runbooks. Should take about 2 hours this afternoon.
+Manager: Perfect. Let's sync again tomorrow at 10 AM. This meeting is adjourned.`;
+
+// ════════════════════════════════════════════════════════════════════
+//  SPEAKER COLORS
+// ════════════════════════════════════════════════════════════════════
+const SP_COLORS = ['#818cf8','#c084fc','#fb923c','#4ade80','#f472b6','#38bdf8'];
+const speakerColor = (name) => SP_COLORS[Math.abs(name.charCodeAt(0) - 65) % SP_COLORS.length];
+
+// ════════════════════════════════════════════════════════════════════
+//  LOGIN PAGE
+// ════════════════════════════════════════════════════════════════════
+function LoginPage({ onLogin }) {
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [err, setErr]           = useState('');
+  const [loading, setLoading]   = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) { setErr('Please fill in all fields.'); return; }
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 600)); // simulate auth
+    localStorage.setItem('meetai_user', JSON.stringify({ email }));
+    onLogin({ email });
+  };
+
+  return (
+    <div style={{minHeight:'100vh', background:'linear-gradient(135deg,#080812 0%,#1a0a2e 60%,#0f172a 100%)', display:'flex', alignItems:'center', justifyContent:'center'}}>
+      {/* Background orbs */}
+      <div style={{position:'fixed',top:'15%',left:'20%',width:300,height:300,borderRadius:'50%',background:'rgba(129,140,248,.08)',filter:'blur(80px)',pointerEvents:'none'}}/>
+      <div style={{position:'fixed',bottom:'20%',right:'15%',width:250,height:250,borderRadius:'50%',background:'rgba(192,132,252,.07)',filter:'blur(70px)',pointerEvents:'none'}}/>
+
+      <div className="card fadein" style={{width:'100%',maxWidth:420,padding:'40px 36px'}}>
+        {/* Logo */}
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{fontSize:48,marginBottom:8}}>🎙️</div>
+          <h1 style={{margin:0,fontSize:32,fontWeight:800}} className="grad">MeetAI</h1>
+          <p style={{margin:'6px 0 0',color:'#64748b',fontSize:14}}>Smart Meeting Intelligence Platform</p>
+        </div>
+
+        {err && (
+          <div style={{background:'rgba(239,68,68,.15)',border:'1px solid rgba(239,68,68,.35)',borderRadius:8,padding:'10px 14px',color:'#fca5a5',fontSize:13,marginBottom:16}}>
+            {err}
+          </div>
+        )}
+
+        <form onSubmit={submit}>
+          <div style={{marginBottom:14}}>
+            <label style={{display:'block',fontSize:13,color:'#94a3b8',marginBottom:5}}>Email address</label>
+            <input className="inp" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" />
+          </div>
+          <div style={{marginBottom:20}}>
+            <label style={{display:'block',fontSize:13,color:'#94a3b8',marginBottom:5}}>Password</label>
+            <input className="inp" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={loading} style={{width:'100%',justifyContent:'center',padding:'12px 20px',fontSize:15}}>
+            {loading ? <><span className="pulse">⚙</span> Signing in...</> : 'Sign In  →'}
+          </button>
+        </form>
+
+        <p style={{textAlign:'center',color:'#334155',fontSize:12,marginTop:16}}>
+          Any email + password works for this demo
+        </p>
+
+        {/* Feature pills */}
+        <div style={{display:'flex',gap:8,justifyContent:'center',marginTop:20,flexWrap:'wrap'}}>
+          {['🎤 Live Transcription','🔍 AI Analysis','💬 Ask AI'].map(f=>(
+            <span key={f} style={{background:'rgba(129,140,248,.1)',border:'1px solid rgba(129,140,248,.2)',borderRadius:20,padding:'3px 10px',fontSize:11,color:'#818cf8'}}>{f}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  DASHBOARD PAGE
+// ════════════════════════════════════════════════════════════════════
+function DashboardPage({ user, onLive, onDemo, onLogout }) {
+  const cards = [
+    {
+      icon:'🎤', label:'LIVE', labelColor:'#818cf8', labelBg:'rgba(129,140,248,.15)',
+      title:'Start Live Meeting',
+      desc:'Record your meeting in real-time. AI transcribes every word and detects speakers automatically.',
+      action: onLive
+    },
+    {
+      icon:'🎬', label:'DEMO', labelColor:'#4ade80', labelBg:'rgba(74,222,128,.15)',
+      title:'Load Demo Meeting',
+      desc:'Try with a preloaded sample transcript — explore all features without a microphone.',
+      action: onDemo
+    },
+    {
+      icon:'📁', label:'SOON', labelColor:'#fb923c', labelBg:'rgba(251,146,60,.15)',
+      title:'Upload Audio File',
+      desc:'Upload a recorded .mp3 or .wav file for AI-powered post-meeting analysis.',
+      action: () => alert('🚧 Audio upload coming soon!\n\nTry the Demo Meeting instead.')
+    },
+  ];
+
+  return (
+    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#080812 0%,#1a0a2e 60%,#0f172a 100%)'}}>
+      <div style={{position:'fixed',top:'10%',right:'10%',width:350,height:350,borderRadius:'50%',background:'rgba(129,140,248,.05)',filter:'blur(90px)',pointerEvents:'none'}}/>
+
+      {/* Navbar */}
+      <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 32px',borderBottom:'1px solid rgba(255,255,255,.07)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:22}}>🎙️</span>
+          <span style={{fontSize:18,fontWeight:800}} className="grad">MeetAI</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <span style={{color:'#475569',fontSize:13}}>👤 {user.email}</span>
+          <button className="btn btn-ghost" style={{padding:'6px 14px',fontSize:13}} onClick={onLogout}>Logout</button>
+        </div>
+      </nav>
+
+      <div style={{maxWidth:900,margin:'0 auto',padding:'60px 24px'}}>
+        <div style={{textAlign:'center',marginBottom:52}}>
+          <h2 style={{margin:0,fontSize:38,fontWeight:800,color:'#f1f5f9'}}>Welcome back 👋</h2>
+          <p style={{margin:'10px 0 0',color:'#64748b',fontSize:16}}>What would you like to do today?</p>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:20}}>
+          {cards.map(c => (
+            <div key={c.title} className="card card-hover fadein" style={{padding:'28px 24px'}} onClick={c.action}>
+              <div style={{fontSize:42,marginBottom:16}}>{c.icon}</div>
+              <h3 style={{margin:'0 0 8px',fontSize:18,fontWeight:700,color:'#f1f5f9'}}>{c.title}</h3>
+              <p style={{margin:'0 0 18px',color:'#64748b',fontSize:14,lineHeight:1.6}}>{c.desc}</p>
+              <span className="tag" style={{background:c.labelBg,color:c.labelColor}}>{c.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Stats strip */}
+        <div style={{display:'flex',gap:16,marginTop:40,flexWrap:'wrap'}}>
+          {[
+            {icon:'⚡',text:'Real-time AI transcription'},
+            {icon:'🧠',text:'Speaker detection & roles'},
+            {icon:'✅',text:'Action items & decisions'},
+            {icon:'⚠️',text:'Risk identification'},
+          ].map(s => (
+            <div key={s.text} style={{display:'flex',alignItems:'center',gap:8,background:'rgba(255,255,255,.03)',border:'1px solid rgba(255,255,255,.07)',borderRadius:10,padding:'10px 16px',fontSize:13,color:'#64748b'}}>
+              <span>{s.icon}</span><span>{s.text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  SPEAKER CARD
+// ════════════════════════════════════════════════════════════════════
+function SpeakerCard({ speaker }) {
+  const col = speakerColor(speaker.name);
+  return (
+    <div className="card" style={{padding:'14px 16px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+        <div style={{width:38,height:38,borderRadius:'50%',background:col+'22',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:16,color:col,flexShrink:0}}>
+          {speaker.name.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <p style={{margin:0,fontWeight:700,color:'#f1f5f9',fontSize:14}}>{speaker.name}</p>
+          <p style={{margin:0,fontSize:11,color:col,fontWeight:600}}>{speaker.role}</p>
+        </div>
+      </div>
+      <ul style={{margin:0,padding:0,listStyle:'none'}}>
+        {speaker.responsibilities.map((r,i) => (
+          <li key={i} style={{display:'flex',gap:6,fontSize:12,color:'#94a3b8',marginBottom:3}}>
+            <span style={{color:col,flexShrink:0}}>▸</span><span>{r}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  ANALYSIS PANEL
+// ════════════════════════════════════════════════════════════════════
+function AnalysisPanel({ analysis }) {
+  const [tab, setTab] = useState('summary');
+
+  const TABS = [
+    {id:'summary',   label:'📋 Summary'},
+    {id:'actions',   label:'✅ Actions'},
+    {id:'decisions', label:'🔔 Decisions'},
+    {id:'risks',     label:'⚠️ Risks'},
+    {id:'speakers',  label:'👥 Speakers'},
+  ];
+
+  const listItems = (items, color, icon) => (
+    <ul style={{margin:0,padding:0,listStyle:'none',display:'flex',flexDirection:'column',gap:8}}>
+      {(items||[]).map((x,i) => (
+        <li key={i} style={{display:'flex',gap:10,fontSize:13,color:'#cbd5e1',lineHeight:1.55}}>
+          <span style={{color,flexShrink:0,marginTop:2}}>{icon}</span><span>{x}</span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  return (
+    <div className="card fadein" style={{padding:'20px',height:'100%',display:'flex',flexDirection:'column'}}>
+      <h3 style={{margin:'0 0 14px',fontSize:16,fontWeight:700,color:'#f1f5f9'}}>🔍 AI Analysis</h3>
+
+      {/* Tabs */}
+      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:16}}>
+        {TABS.map(t => (
+          <button key={t.id} className={`tab ${tab===t.id?'tab-active':'tab-inactive'}`} onClick={()=>setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1,overflowY:'auto'}}>
+        {tab==='summary'   && <p style={{margin:0,fontSize:13,color:'#cbd5e1',lineHeight:1.75}}>{analysis.summary}</p>}
+        {tab==='actions'   && listItems(analysis.actionItems,   '#4ade80', '✓')}
+        {tab==='decisions' && listItems(analysis.decisions,      '#818cf8', '◆')}
+        {tab==='risks'     && listItems(analysis.risks,          '#fbbf24', '⚠')}
+        {tab==='speakers'  && (
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {(analysis.speakers||[]).map((s,i) => <SpeakerCard key={i} speaker={s} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  MEETING PAGE
+// ════════════════════════════════════════════════════════════════════
+function MeetingPage({ user, initialTranscript, isDemo, onBack }) {
+  const [transcript, setTranscript]   = useState(initialTranscript || '');
+  const [interim,    setInterim]      = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [analysis,   setAnalysis]     = useState(null);
+  const [isAnalyzing,setIsAnalyzing]  = useState(false);
+  const [chat,       setChat]         = useState([]);
+  const [question,   setQuestion]     = useState('');
+  const [isAsking,   setIsAsking]     = useState(false);
+  const [err,        setErr]          = useState('');
+
+  const recRef     = useRef(null);
+  const recFlagRef = useRef(false);
+  const txBoxRef   = useRef(null);
+  const chatBoxRef = useRef(null);
+
+  // Auto-scroll
+  useEffect(() => { if(txBoxRef.current)   txBoxRef.current.scrollTop   = txBoxRef.current.scrollHeight;   }, [transcript, interim]);
+  useEffect(() => { if(chatBoxRef.current) chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight; }, [chat]);
+
+  // ── Recording ──────────────────────────────────────────────────
+  const startRecording = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setErr('Speech recognition not supported. Please use Chrome or Edge.'); return; }
+
+    const r = new SR();
+    r.continuous      = true;
+    r.interimResults  = true;
+    r.lang            = 'en-US';
+    r.maxAlternatives = 1;
+
+    r.onresult = (e) => {
+      let fin='', tmp='';
+      for (let i=e.resultIndex; i<e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) fin += t + ' '; else tmp += t;
+      }
+      if (fin) setTranscript(p => p + fin);
+      setInterim(tmp);
+    };
+    r.onerror = (e) => {
+      if (e.error !== 'no-speech') { setErr('Mic error: ' + e.error); stopRecording(); }
+    };
+    r.onend = () => {
+      if (recFlagRef.current) r.start(); // auto-restart
+    };
+
+    recFlagRef.current = true;
+    recRef.current = r;
+    r.start();
+    setIsRecording(true);
+    setErr('');
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    recFlagRef.current = false;
+    if (recRef.current) { recRef.current.stop(); recRef.current = null; }
+    setIsRecording(false);
+    setInterim('');
+  }, []);
+
+  // ── Analyze ────────────────────────────────────────────────────
+  const analyze = async () => {
+    if (!transcript.trim()) { setErr('No transcript to analyze.'); return; }
+    setIsAnalyzing(true); setErr('');
+    try {
+      const r = await fetch(`${BACKEND_URL}/analyze`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ transcript })
+      });
+      if (!r.ok) throw new Error(`Server responded ${r.status}`);
+      setAnalysis(await r.json());
+    } catch(e) {
+      setErr('Analysis failed: ' + e.message + '. Is the backend running on port 3001?');
+    } finally { setIsAnalyzing(false); }
+  };
+
+  // ── Ask AI ─────────────────────────────────────────────────────
+  const askAI = async () => {
+    const q = question.trim();
+    if (!q || !transcript.trim()) return;
+    setQuestion('');
+    setChat(p => [...p, {role:'user', text:q}]);
+    setIsAsking(true);
+    try {
+      const r = await fetch(`${BACKEND_URL}/ask`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ transcript, question:q })
+      });
+      if (!r.ok) throw new Error('Server error');
+      const d = await r.json();
+      setChat(p => [...p, {role:'ai', text:d.answer}]);
+    } catch(e) {
+      setChat(p => [...p, {role:'ai', text:'⚠️ Error: ' + e.message}]);
+    } finally { setIsAsking(false); }
+  };
+
+  const QUICK_Q = ["Who is handling backend?","What are the action items?","What risks were discussed?"];
+
+  return (
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'linear-gradient(135deg,#080812 0%,#1a0a2e 60%,#0f172a 100%)'}}>
+
+      {/* ── Navbar ── */}
+      <nav style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 24px',borderBottom:'1px solid rgba(255,255,255,.07)',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:20}}>🎙️</span>
+          <span style={{fontWeight:800,fontSize:17}} className="grad">MeetAI</span>
+
+          {isRecording && (
+            <div style={{display:'flex',alignItems:'center',gap:6,background:'rgba(239,68,68,.15)',border:'1px solid rgba(239,68,68,.3)',borderRadius:20,padding:'3px 10px',marginLeft:6}}>
+              <span className="rec-dot"/>
+              <span style={{color:'#f87171',fontSize:11,fontWeight:700,letterSpacing:.5}}>RECORDING</span>
+            </div>
+          )}
+          {isDemo && (
+            <span className="tag" style={{background:'rgba(74,222,128,.12)',color:'#4ade80',marginLeft:6}}>DEMO MODE</span>
+          )}
+        </div>
+
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {!isDemo && (
+            isRecording
+              ? <button className="btn btn-danger" style={{fontSize:13}} onClick={stopRecording}>⏹ Stop</button>
+              : <button className="btn btn-ghost"  style={{fontSize:13}} onClick={startRecording}>🎤 Record</button>
+          )}
+          <button className="btn btn-primary" style={{fontSize:13}} disabled={isAnalyzing||!transcript.trim()} onClick={analyze}>
+            {isAnalyzing ? <><span className="pulse">⚙️</span> Analyzing…</> : '🔍 Analyze Meeting'}
+          </button>
+          <button className="btn btn-ghost" style={{fontSize:13,padding:'7px 14px'}} onClick={onBack}>← Back</button>
+        </div>
+      </nav>
+
+      {/* Error banner */}
+      {err && (
+        <div style={{margin:'10px 20px 0',background:'rgba(239,68,68,.12)',border:'1px solid rgba(239,68,68,.3)',borderRadius:9,padding:'10px 14px',color:'#fca5a5',fontSize:13}}>
+          {err}
+        </div>
+      )}
+
+      {/* ── Main Grid ── */}
+      <div style={{flex:1,padding:'16px 20px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,overflow:'auto'}}>
+
+        {/* Left column */}
+        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+
+          {/* Transcript */}
+          <div className="card" style={{padding:'16px 18px',flex:'1 1 auto'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+              <h3 style={{margin:0,fontSize:15,fontWeight:700,color:'#f1f5f9'}}>Live Transcript</h3>
+              <span style={{color:'#475569',fontSize:12}}>{transcript.trim().split(/\s+/).filter(Boolean).length} words</span>
+            </div>
+            <div ref={txBoxRef} className="transcript-box">
+              {transcript
+                ? <span style={{color:'#94a3b8'}}>{transcript}</span>
+                : <span style={{color:'#334155',fontStyle:'italic'}}>Transcript will appear here…</span>
+              }
+              {interim && <span style={{color:'#475569',fontStyle:'italic'}}>{interim}</span>}
+            </div>
+            {!isDemo && !isRecording && !transcript && (
+              <p style={{margin:'10px 0 0',color:'#334155',fontSize:12}}>
+                💡 Click <strong style={{color:'#64748b'}}>Record</strong> in the toolbar to start capturing your meeting.
+              </p>
+            )}
+          </div>
+
+          {/* Ask AI */}
+          <div className="card" style={{padding:'16px 18px',flexShrink:0}}>
+            <h3 style={{margin:'0 0 12px',fontSize:15,fontWeight:700,color:'#f1f5f9'}}>💬 Ask AI</h3>
+
+            <div ref={chatBoxRef} style={{maxHeight:140,overflowY:'auto',display:'flex',flexDirection:'column',gap:7,marginBottom:10}}>
+              {chat.length===0 && (
+                <p style={{margin:0,fontSize:12,color:'#334155',fontStyle:'italic'}}>Ask anything about the meeting…</p>
+              )}
+              {chat.map((m,i) => (
+                <div key={i} className={m.role==='user'?'bubble-user':'bubble-ai'} style={{padding:'8px 12px',maxWidth:'90%',alignSelf:m.role==='user'?'flex-end':'flex-start'}}>
+                  <span style={{fontSize:11,fontWeight:700,color:m.role==='user'?'#818cf8':'#c084fc',display:'block',marginBottom:2}}>
+                    {m.role==='user'?'You':'🤖 AI'}
+                  </span>
+                  <span style={{fontSize:13,color:'#cbd5e1',lineHeight:1.5}}>{m.text}</span>
+                </div>
+              ))}
+              {isAsking && <div style={{fontSize:12,color:'#64748b'}} className="pulse">🤖 AI is thinking…</div>}
+            </div>
+
+            <div style={{display:'flex',gap:8}}>
+              <input className="inp" value={question} onChange={e=>setQuestion(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&askAI()}
+                placeholder='e.g. "Who handles backend?" or "What are the risks?"'
+                style={{fontSize:13,padding:'8px 12px'}} />
+              <button className="btn btn-primary" style={{fontSize:13,flexShrink:0}} disabled={isAsking||!question.trim()||!transcript.trim()} onClick={askAI}>
+                Ask
+              </button>
+            </div>
+
+            {/* Quick questions */}
+            <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
+              {QUICK_Q.map(q => (
+                <button key={q} onClick={()=>setQuestion(q)}
+                  style={{background:'rgba(129,140,248,.08)',border:'1px solid rgba(129,140,248,.15)',borderRadius:6,padding:'3px 9px',fontSize:11,color:'#818cf8',cursor:'pointer',transition:'background .15s'}}
+                  onMouseOver={e=>e.target.style.background='rgba(129,140,248,.16)'}
+                  onMouseOut={e=>e.target.style.background='rgba(129,140,248,.08)'}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right column — Analysis */}
+        <div style={{minHeight:400}}>
+          {analysis ? (
+            <AnalysisPanel analysis={analysis} />
+          ) : (
+            <div className="card" style={{padding:'40px 28px',height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center'}}>
+              <div style={{fontSize:60,marginBottom:16}}>🔍</div>
+              <h3 style={{margin:'0 0 10px',fontSize:20,fontWeight:700,color:'#f1f5f9'}}>Ready to Analyze</h3>
+              <p style={{margin:'0 0 24px',color:'#64748b',fontSize:14,lineHeight:1.6,maxWidth:280}}>
+                {transcript
+                  ? 'Click "Analyze Meeting" to extract insights, action items, decisions, and speaker roles.'
+                  : isDemo
+                    ? 'Demo transcript loaded! Click "Analyze Meeting" to see AI insights.'
+                    : 'Start recording your meeting. When done, click "Analyze Meeting".'}
+              </p>
+              {transcript && (
+                <button className="btn btn-primary" style={{padding:'11px 24px',fontSize:14}} disabled={isAnalyzing} onClick={analyze}>
+                  {isAnalyzing ? '⚙️ Analyzing…' : '🔍 Analyze Now'}
+                </button>
+              )}
+
+              {/* Feature list */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:28,width:'100%',maxWidth:320}}>
+                {[['📋','Summary'],['✅','Action Items'],['🔔','Decisions'],['⚠️','Risks'],['👥','Speaker Roles'],['💬','Ask AI']].map(([ic,lb])=>(
+                  <div key={lb} style={{background:'rgba(255,255,255,.03)',borderRadius:9,padding:'8px 12px',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:16}}>{ic}</span>
+                    <span style={{fontSize:12,color:'#64748b'}}>{lb}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  ROOT APP
+// ════════════════════════════════════════════════════════════════════
+function App() {
+  const [page, setPage] = useState('login');
+  const [user, setUser] = useState(null);
+  const [initTx, setInitTx] = useState('');
+  const [isDemo, setIsDemo] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('meetai_user');
+    if (stored) { try { setUser(JSON.parse(stored)); setPage('dashboard'); } catch(e){} }
+  }, []);
+
+  const handleLogin = (u) => { setUser(u); setPage('dashboard'); };
+  const handleLogout = () => { localStorage.removeItem('meetai_user'); setUser(null); setPage('login'); };
+  const goLive = () => { setInitTx(''); setIsDemo(false); setPage('meeting'); };
+  const goDemo = () => { setInitTx(DEMO_TRANSCRIPT); setIsDemo(true); setPage('meeting'); };
+
+  if (page==='login')     return <LoginPage onLogin={handleLogin} />;
+  if (page==='dashboard') return <DashboardPage user={user} onLive={goLive} onDemo={goDemo} onLogout={handleLogout} />;
+  if (page==='meeting')   return <MeetingPage user={user} initialTranscript={initTx} isDemo={isDemo} onBack={()=>setPage('dashboard')} />;
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
