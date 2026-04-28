@@ -12,10 +12,7 @@ const client = new Anthropic({
 });
 
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'MeetAI Backend is running',
-  });
+  res.json({ status: 'ok' });
 });
 
 app.post('/analyze', async (req, res) => {
@@ -23,9 +20,7 @@ app.post('/analyze', async (req, res) => {
     const { transcript } = req.body;
 
     if (!transcript || transcript.trim().length < 10) {
-      return res.status(400).json({
-        error: 'Transcript too short or missing',
-      });
+      return res.status(400).json({ error: 'Transcript too short' });
     }
 
     const response = await client.messages.create({
@@ -34,12 +29,10 @@ app.post('/analyze', async (req, res) => {
       messages: [
         {
           role: 'user',
-          content: `You are a professional meeting intelligence AI.
-
-Return ONLY valid JSON.
+          content: `You are a meeting AI. Return ONLY valid JSON.
 
 {
-  "summary": "string",
+  "summary": "",
   "actionItems": [],
   "decisions": [],
   "risks": [],
@@ -52,34 +45,30 @@ ${transcript}`,
       ],
     });
 
-    const raw = response.content[0].text;
+    const textBlock = response.content.find(c => c.type === 'text');
+    const raw = textBlock ? textBlock.text : '';
 
-    const clean = raw
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim();
+    const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
 
-   let data;
+    let data;
 
-try {
-  data = JSON.parse(clean);
-} catch (e) {
-  console.log("RAW AI RESPONSE:", raw);
-
-  data = {
-    summary: raw.slice(0, 200),
-    actionItems: [],
-    decisions: [],
-    risks: [],
-    speakers: [],
-  };
-}
+    try {
+      data = JSON.parse(clean);
+    } catch {
+      data = {
+        summary: raw || 'AI response could not be parsed',
+        actionItems: [],
+        decisions: [],
+        risks: [],
+        speakers: [],
+      };
+    }
 
     res.json(data);
   } catch (err) {
+    console.error('ANALYZE ERROR:', err);
     res.status(500).json({
-      error: 'AI processing failed',
-      details: err.message,
+      error: err.message || 'Internal server error',
     });
   }
 });
@@ -114,15 +103,16 @@ Answer:`,
       ],
     });
 
-    const answer = response.content[0].text.trim();
+    const textBlock = response.content.find(c => c.type === 'text');
+    const answer = textBlock ? textBlock.text.trim() : '';
 
     res.json({
       answer: answer || 'Not mentioned in meeting',
     });
   } catch (err) {
+    console.error('ASK ERROR:', err);
     res.status(500).json({
-      error: 'AI Q&A failed',
-      details: err.message,
+      error: err.message || 'Internal server error',
     });
   }
 });
