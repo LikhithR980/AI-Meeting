@@ -431,21 +431,25 @@ function MeetingPage({ user, initialTranscript, isDemo, onBack }) {
   }, []);
 
   // ── Analyze ────────────────────────────────────────────────────
-  const analyze = async () => {
-    if (!transcript.trim()) { setErr('No transcript to analyze.'); return; }
-    setIsAnalyzing(true); setErr('');
-    try {
-      const r = await fetch(`${BACKEND_URL}/analyze`, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ transcript })
-      });
-      if (!r.ok) throw new Error(`Server responded ${r.status}`);
-      setAnalysis(await r.json());
-    } catch(e) {
-      setErr('Analysis failed: ' + e.message + '. Is the backend running on port 3001?');
-    } finally { setIsAnalyzing(false); }
-  };
+  // /analyze fetch
+const r = await fetch(`${BACKEND_URL}/analyze`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': 'meetai-secret-123'   // ← add this
+  },
+  body: JSON.stringify({ transcript })
+});
+
+// /ask fetch
+const r = await fetch(`${BACKEND_URL}/ask`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-api-key': 'meetai-secret-123'   // ← add this
+  },
+  body: JSON.stringify({ transcript, question: q })
+});
 
   // ── Ask AI ─────────────────────────────────────────────────────
   const askAI = async () => {
